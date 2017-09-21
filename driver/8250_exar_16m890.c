@@ -12,6 +12,7 @@
 *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 *	GNU General Public License for more details.
 *
+*	reference by linux-2.4.x/driver/char/adv950.c, type = PORT_16850
 */
 
 #include <linux/module.h>
@@ -42,7 +43,6 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 
-#include "8250.h"
 #include "8250_exar_16m890.h"
 
 //#define __ADV_DEBUG_INFO__
@@ -75,7 +75,7 @@ uint64_t db_irq_record[16];
 
 extern void set_io_from_upio(struct uart_port *p);
 
-static const struct serial8250_config xr_uart_config[] = {
+static const struct serialxr_config xr_uart_config[] = {
 	[PORT_UNKNOWN] = {
 		.name		= "unknown",
 		.fifo_size	= 1,
@@ -1168,9 +1168,6 @@ static unsigned int serialxr_port_size(struct uart_8250_port *pt)
 	if (pt->port.iotype == UPIO_AU) 
 		return 0x1000;
 
-	if (is_omap1_8250(pt))
-		return 0x16 << pt->port.regshift;
-
 	return 8 << pt->port.regshift;
 }
 
@@ -1695,5 +1692,4 @@ module_init(serialxr_init);
 module_exit(serialxr_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Phil.Chang <soso7885@hotmail.com>")
-MODULE_DESCRIPTION("Exar 16m890 uart driver with local bus");
+MODULE_DESCRIPTION("Exar 16m890 uart driver for Advantech EKI-series");

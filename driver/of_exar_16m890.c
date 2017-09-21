@@ -6,7 +6,6 @@
 #include <linux/of_platform.h>
 #include <linux/clk.h>
 
-#include "8250.h"
 #include "8250_exar_16m890.h"
 
 extern int serialxr_register_16m890_port(struct uart_8250_port *up);
