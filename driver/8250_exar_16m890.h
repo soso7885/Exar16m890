@@ -21,7 +21,7 @@
 #define XR_16M890_SFR			6
 #define XR_FCTR_DIR_CTRL	0x08  /* Auto RS-485 Direction Control */
 #define XR_MCR_PRESCALER	0x80
-#define XR_16M890_SFR_TXDIS	0x10	
+#define XR_16M890_SFR_TXDIS	0x10
 
 /*
  * The ioctl command

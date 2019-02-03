@@ -55,23 +55,23 @@ unsigned int db_thr_cnt[16];
 uint64_t db_irq_record[16];
 #define ADV_DEBUG_IRQ(EX) (void)(EX)
 #else
-#define ADV_DEBUG_IRQ(EX) do{}while(0)
+#define ADV_DEBUG_IRQ(EX) do{} while(0)
 #endif
 
 #ifdef __ADV_DEBUG_INFO__
 #define adv_info(str, args...) pr_info("" str, ##args)
 #else
-#define adv_info(str, args...) do{}while(0)
+#define adv_info(str, args...) do{} while(0)
 #endif
 
-#define LOWBAUD_THRESHOLD		2400
-#define MIDBAUD_THRESHOLD		9600
+#define LOWBAUD_THRESHOLD	2400
+#define MIDBAUD_THRESHOLD	9600
 #define LOWBAUD_TTL		UART_TRG_1
 #define LOWBAUD_RTL		UART_TRG_2
 #define MIDBAUD_TTL		UART_TRG_1
 #define MIDBAUD_RTL		UART_TRG_5
-#define HIGHBAUD_TTL	UART_TRG_8
-#define HIGHBAUD_RTL	UART_TRG_48
+#define HIGHBAUD_TTL		UART_TRG_8
+#define HIGHBAUD_RTL		UART_TRG_48
 
 extern void set_io_from_upio(struct uart_port *p);
 
@@ -81,6 +81,7 @@ static const struct serialxr_config xr_uart_config[] = {
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
+
 	[PORT_XR16M890] = {
 		.name		= "XR16M890",
 		.fifo_size	= 128,
@@ -98,7 +99,7 @@ static inline const char *serialxr_portname(struct uart_port *port)
 static inline void private_data_init(struct uart_port *port)
 {
 	struct exar_priv *priv = port->private_data;
-	
+
 	priv->throttle = false;
 	priv->mbusreadmode = false;
 	priv->loopback = false;
@@ -106,17 +107,17 @@ static inline void private_data_init(struct uart_port *port)
 	priv->baud = 9600;
 }
 
-/* 
- * Caller holds uart port lock 
+/*
+ * Caller holds uart port lock
  */
 static unsigned int serialxr_modem_status(struct uart_port *port)
 {
-	struct uart_8250_port *up = up_to_u8250p(port); 
+	struct uart_8250_port *up = up_to_u8250p(port);
 	unsigned int status = serial_in(up, UART_MSR);
 
 	status |= up->msr_saved_flags;
 	up->msr_saved_flags = 0;
-	if(status & UART_MSR_ANY_DELTA && 
+	if (status & UART_MSR_ANY_DELTA &&
 		up->ier & UART_IER_MSI &&
 	    port->state != NULL)
 	{
@@ -167,7 +168,7 @@ static unsigned int serialxr_tx_empty(struct uart_port *port)
 static void serialxr_stop_tx(struct uart_port *port)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
-	
+
 	if (up->ier & UART_IER_THRI) {
 		up->ier &= ~UART_IER_THRI;
 		serial_port_out(port, UART_IER, up->ier);
@@ -183,7 +184,7 @@ static void serialxr_start_tx(struct uart_port *port)
 		up->ier |= UART_IER_THRI;
 		serial_port_out(port, UART_IER, up->ier);
 	}
-	
+
 	if (priv->loopback) {
 		unsigned int lcr;
 		unsigned int mcr;
@@ -213,23 +214,25 @@ static void serialxr_rx_chars_RDI(struct uart_port *port)
 	struct tty_port *tty = &port->state->port;
 	struct exar_priv *priv = port->private_data;
 
-	if(priv->throttle) return; //need?
+	if (priv->throttle) return; //need?
 
 	bytes_in_fifo = priv->RTL-1;
 
-	for(i = 0; i < bytes_in_fifo; ++i){
+	for (i = 0; i < bytes_in_fifo; ++i) {
 		ch = serial_port_in(port, UART_RX);
 		tty_insert_flip_char(tty, ch, TTY_NORMAL);
 		port->icount.rx++;
 	}
 	priv->rx = port->icount.rx;
 
-	if(priv->mbusreadmode) return;
+	/* Add for modbus mode */
+	if (priv->mbusreadmode)
+		return;
 
 	spin_unlock(&port->lock);
 	tty_flip_buffer_push(tty);
 	spin_lock(&port->lock);
-	
+
 	DEBUG_INTR(" LSR_DR...");
 }
 
@@ -240,7 +243,7 @@ static void serialxr_rx_chars(struct uart_port *port, unsigned char *lsr)
 	struct tty_port *tty = &port->state->port;
 	struct exar_priv *priv = port->private_data;
 
-	if(priv->throttle) return; //need?
+	if (priv->throttle) return; //need?
 
 	do{
 		if(likely(*lsr & UART_LSR_DR))
@@ -256,7 +259,7 @@ static void serialxr_rx_chars(struct uart_port *port, unsigned char *lsr)
 ignore_char:
 		*lsr = serial_port_in(port, UART_LSR);
 	}while((*lsr & UART_LSR_DR) && (max_count-- > 0));
-	
+
 	priv->rx = port->icount.rx;
 
 	spin_unlock(&port->lock);
@@ -273,7 +276,7 @@ static void serialxr_tx_chars(struct uart_port *port)
 	struct circ_buf *xmit = &port->state->xmit;
 	struct exar_priv *priv = port->private_data;
 
-	if(port->x_char){
+	if (port->x_char){
 		serial_port_out(port, UART_TX, port->x_char);
 		port->icount.tx++;
 		port->x_char = 0;
@@ -281,42 +284,42 @@ static void serialxr_tx_chars(struct uart_port *port)
 		ADV_DEBUG_IRQ(db_txstat[priv->line] = -1);
 		return;
 	}
-	
+
 	if(uart_tx_stopped(port)){
 		serialxr_stop_tx(port);
 		ADV_DEBUG_IRQ(db_txstat[priv->line] = -2);
 		return;
 	}
-	
+
 	if(uart_circ_empty(xmit)){
 		serialxr_stop_tx(port);
 		ADV_DEBUG_IRQ(db_txstat[priv->line] = -3);
 		return;
 	}
-	
+
 	count = (unsigned int)(port->fifosize - priv->TTL);
 
 	do{
 		serial_port_out(port, UART_TX, xmit->buf[xmit->tail]);
 		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
 		port->icount.tx++;
-		if (uart_circ_empty(xmit)) 
+		if (uart_circ_empty(xmit))
 			break;
 	} while (--count > 0);
 	priv->tx = port->icount.tx;
 
-	if(uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
 
 	DEBUG_INTR("THRE...");
 
-	if(uart_circ_empty(xmit)){
+	if (uart_circ_empty(xmit)) {
 		serialxr_stop_tx(port);
-	}else{
+	} else {
 		unsigned int THR;
 
 		THR = serial_port_in(port, UART_SCR);
-		if(THR < priv->TTL){
+		if (THR < priv->TTL) {
 			/* Try to re-trigger Enable Transmitter holding */
 			pr_info("re-trigger tx empty interrupt, THR=%d\n", THR);
 			serial_port_out(port, UART_IER, up->ier & (~UART_IER_THRI));
@@ -324,6 +327,7 @@ static void serialxr_tx_chars(struct uart_port *port)
 			ADV_DEBUG_IRQ(db_re_ier_cnt[priv->line]++);
 		}
 	}
+
 	ADV_DEBUG_IRQ(db_txstat[priv->line] = uart_circ_chars_pending(xmit));
 }
 
@@ -368,7 +372,7 @@ static unsigned int serialxr_get_mctrl(struct uart_port *port)
 
 static void check_line_status(struct uart_port *port, unsigned char *lsr)
 {
-	while(*lsr & UART_LSR_BRK_ERROR_BITS) {
+	while (*lsr & UART_LSR_BRK_ERROR_BITS) {
 		if (*lsr & UART_LSR_BI) {
 			*lsr &= ~(UART_LSR_FE | UART_LSR_PE);
 			port->icount.brk++;
@@ -377,15 +381,15 @@ static void check_line_status(struct uart_port *port, unsigned char *lsr)
 		} else if (*lsr & UART_LSR_FE) {
 			port->icount.frame++;
 		}
-		if (*lsr & UART_LSR_OE) {
+
+		if (*lsr & UART_LSR_OE)
 			port->icount.overrun++;
-		}
+
 		*lsr = serial_port_in(port, UART_LSR);
 	}
 }
 
-unsigned char serialxr_compute_lcr(struct uart_8250_port *up,
-									tcflag_t c_cflag)              
+unsigned char serialxr_compute_lcr(struct uart_8250_port *up, tcflag_t c_cflag)
 {
 	unsigned char cval;
 	struct exar_priv *priv = up->port.private_data;
@@ -407,39 +411,38 @@ unsigned char serialxr_compute_lcr(struct uart_8250_port *up,
 		case CS8:
 			cval = UART_LCR_WLEN8;
 			priv->data = 8;
-			break;                
+			break;
 	}
 
-	if (c_cflag & CSTOPB){    
+	if (c_cflag & CSTOPB) {
 		cval |= UART_LCR_STOP;
 		priv->stop = 2;
-	}else{
+	} else {
 		priv->stop = 1;
 	}
 
-	if (c_cflag & PARENB) {   
+	if (c_cflag & PARENB) {
 		cval |= UART_LCR_PARITY;
-		if(c_cflag & PARODD){
-			if(c_cflag & CMSPAR){
+		if (c_cflag & PARODD) {
+			if(c_cflag & CMSPAR)
 				priv->pary = 4;
-			}else{
+			else
 				priv->pary = 2;
-			}
-		}else if(c_cflag & CMSPAR){
+		} else if (c_cflag & CMSPAR) {
 			priv->pary = 5;
-		}else{
+		} else {
 			priv->pary = 3;
 		}
-	}else{
+	} else {
 		priv->pary = 1;
 	}
-		  
-	if (!(c_cflag & PARODD))  
+
+	if (!(c_cflag & PARODD))
 		cval |= UART_LCR_EPAR;
 #ifdef CMSPAR
 	if (c_cflag & CMSPAR)
 		cval |= UART_LCR_SPAR;
-#endif 
+#endif
 
 	return cval;
 }
@@ -463,56 +466,50 @@ static irqreturn_t serialxr_isr(int irq, void *dev_id)
 
 	do {
 		iir = serial_port_in(port, UART_IIR);
-		if(iir & UART_IIR_NO_INT)
+		if (iir & UART_IIR_NO_INT)
 			break;
 
 		handled = 1;
-		switch(iir & 0x3F){
+		switch (iir & 0x3F) {
 			case UART_IIR_RDI: /* Receiver data interrupt */
-				ADV_DEBUG_IRQ(
-							db_irq_record[priv->line] = 
-							((db_irq_record[priv->line]<<4)&MASK)|1
-							);
-				lsr = (unsigned char)serial_port_in(port, UART_LSR);
-				if(lsr & UART_LSR_DR)
+				ADV_DEBUG_IRQ(db_irq_record[priv->line] =
+				((db_irq_record[priv->line] << 4) & MASK) | 1);
+
+				lsr = (uint8_t)serial_port_in(port, UART_LSR);
+				if (lsr & UART_LSR_DR)
 					serialxr_rx_chars_RDI(port);
 				break;
 			case UART_IIR_MSI: /* Modem status interrupt */
-				ADV_DEBUG_IRQ(
-							db_irq_record[priv->line] = 
-							((db_irq_record[priv->line]<<4)&MASK)|2
-							);
+				ADV_DEBUG_IRQ(db_irq_record[priv->line] =
+				((db_irq_record[priv->line] << 4) & MASK) | 2);
+
 				serialxr_modem_status(port);
 				break;
 			case UART_IIR_RX_TIMEOUT: /* Receiver data time-out */
-				ADV_DEBUG_IRQ(
-							db_irq_record[priv->line] = 
-							((db_irq_record[priv->line]<<4)&MASK)|3
-							);
-				lsr = (unsigned char)serial_port_in(port, UART_LSR);
+				ADV_DEBUG_IRQ(db_irq_record[priv->line] =
+				((db_irq_record[priv->line] << 4) & MASK) | 3);
+
+				lsr = (uint8_t)serial_port_in(port, UART_LSR);
 				if(lsr & UART_LSR_DR)
 					serialxr_rx_chars(port, &lsr);
 				priv->charto++;
 				break;
 			case UART_IIR_RLSI: /* Receiver line status interrupt */
-				ADV_DEBUG_IRQ(
-							db_irq_record[priv->line] = 
-							((db_irq_record[priv->line]<<4)&MASK)|4
-							);
-				lsr = (unsigned char)serial_port_in(port, UART_LSR);
+				ADV_DEBUG_IRQ(db_irq_record[priv->line] =
+				((db_irq_record[priv->line] << 4) & MASK) | 4);
+
+				lsr = (uint8_t)serial_port_in(port, UART_LSR);
 				check_line_status(port, &lsr);
 				break;
 			case UART_IIR_THRI: /* Transmitter holding register empty */
-				ADV_DEBUG_IRQ(
-							db_irq_record[priv->line] = 
-							((db_irq_record[priv->line]<<4)&MASK)|5
-							);
+				ADV_DEBUG_IRQ(db_irq_record[priv->line] =
+				((db_irq_record[priv->line] << 4)&MASK) | 5);
 				serialxr_tx_chars(port);
 				break;
 			default:
 				break;
 		}
-	}while (!(iir & UART_IIR_NO_INT) && max_count--);
+	} while (!(iir & UART_IIR_NO_INT) && max_count--);
 
 	spin_unlock(&port->lock);
 
@@ -532,7 +529,7 @@ static int serialxr_startup(struct uart_port *port)
 	port->fifosize = xr_uart_config[port->type].fifo_size;
 	up->tx_loadsz = xr_uart_config[port->type].tx_loadsz;
 	up->capabilities = xr_uart_config[port->type].flags;
-	
+
 	private_data_init(port);
 	up->mcr = 0;
 
@@ -554,7 +551,7 @@ static int serialxr_startup(struct uart_port *port)
 	 * here.
 	 */
 	if (!(port->flags & UPF_BUGGY_UART) &&
-	    (serial_port_in(port, UART_LSR) == 0xff)) 
+	    (serial_port_in(port, UART_LSR) == 0xff))
 	{
 		printk_ratelimited(KERN_INFO "ttyS%d: LSR safety check engaged!\n",
 						   serial_index(port));
@@ -562,16 +559,14 @@ static int serialxr_startup(struct uart_port *port)
 		goto out;
 	}
 
-	/* Enable enhance mode */ 
+	/* Enable enhance mode */
 	serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
 	serial_port_out(port, UART_EFR, UART_EFR_ECB);
 	/* Set tx/rx fifo trigger level */
 	fctr = serial_port_in(port, UART_FCTR);
-	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | 
-										UART_FCTR_TX | fctr);
+	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | UART_FCTR_TX | fctr);
 	serial_port_out(port, UART_TRG, UART_TRG_1);
-	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD |
-									(~UART_FCTR_TX & fctr));
+	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | (~UART_FCTR_TX & fctr));
 	serial_port_out(port, UART_TRG, UART_TRG_5);
 	serial_port_out(port, UART_LCR, 0);
 	/*
@@ -594,11 +589,11 @@ static int serialxr_startup(struct uart_port *port)
 	serial_port_out(port, UART_EMSR, 0x01);
 
 	/* NO support shared IRQ */
-	retval = request_irq(port->irq, serialxr_isr, 
-						port->irqflags, serialxr_portname(port), port);
+	retval = request_irq(port->irq, serialxr_isr,
+			port->irqflags, serialxr_portname(port), port);
 	if(retval)
 		goto out;
-	
+
 	/*
 	 * Now, initialize the UART
 	 */
@@ -652,7 +647,7 @@ static void serialxr_shutdown(struct uart_port *port)
 
 	port->mctrl &= ~TIOCM_OUT2;
 	serialxr_set_mctrl(port, port->mctrl);
-	
+
 	spin_unlock_irqrestore(&port->lock, flags);
 	/*
 	 * Disable break condition and FIFOs
@@ -672,8 +667,8 @@ static void serialxr_shutdown(struct uart_port *port)
  * flow control, modem status and rs232/422/485 interrupt
 */
 static void flow_control_handle(struct uart_port *port,
-								struct exar_priv *priv,
-								struct ktermios *termios)
+				struct exar_priv *priv,
+				struct ktermios *termios)
 {
 	unsigned char efr;
 	struct uart_8250_port *up = up_to_u8250p(port);
@@ -686,7 +681,7 @@ static void flow_control_handle(struct uart_port *port,
 
 	efr = UART_EFR_ECB;
 
-	if(I_IXOFF(tty)){
+	if (I_IXOFF(tty)) {
 		/*
 		 * Enable xon/xoff, LCR=0xBF & SFR[0]=0
 		 * make sure SFR[0] = 0
@@ -704,12 +699,12 @@ static void flow_control_handle(struct uart_port *port,
 		up->mcr |= UART_MCR_XONANY;
 
 	if(termios->c_iflag & (XR_RS422 | XR_RS485)){
-		adv_info("Port ttyS%d under rs422/485 mode, gpio(%d) set to 0\n", 
-									port->line, priv->gpio_sel);
+		adv_info("Port ttyS%d under rs422/485 mode, gpio(%d) set to 0\n",
+						port->line, priv->gpio_sel);
 		/* rs422/485 mode pull the relative GPIO to low */
 		gpio_set_value(priv->gpio_sel, 0);
 
-		if(termios->c_iflag & XR_RS485){
+		if (termios->c_iflag & XR_RS485) {
 			unsigned char fctr;
 			/* set RS485 auto direction control */
 			serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
@@ -717,21 +712,21 @@ static void flow_control_handle(struct uart_port *port,
 			serial_port_out(port, UART_FCTR, fctr | XR_FCTR_DIR_CTRL);
 			serial_port_out(port, UART_LCR, 0);
 			priv->type = PORT_RS485;
-		}else{
+		} else {
 			priv->type = PORT_RS422;
 		}
 		up->ier &= ~UART_IER_MSI;
-	}else{
-		adv_info("Port ttyS%d under rs232 mode, gpio(%d) set to 1\n", 
-									port->line, priv->gpio_sel);
+	} else {
+		adv_info("Port ttyS%d under rs232 mode, gpio(%d) set to 1\n",
+						port->line, priv->gpio_sel);
 		/* rs232 mode, pull the relative GPIO to high */
 		gpio_set_value(priv->gpio_sel, 1);
-		
+
 		/* enable/disable RTS/CTS */
-		if(termios->c_cflag & CRTSCTS){
+		if (termios->c_cflag & CRTSCTS) {
 			efr |= UART_EFR_CTS | UART_EFR_RTS;
 			up->ier &= ~UART_IER_MSI;
-		}else{
+		} else {
 			up->ier |= UART_IER_MSI;
 		}
 		efr |= UART_EFR_ECB;
@@ -741,30 +736,29 @@ static void flow_control_handle(struct uart_port *port,
 	serial_port_out(port, UART_EFR, efr);
 	serial_port_out(port, UART_LCR, 0);
 
-	if(termios->c_iflag & (XR_RS422 | XR_RS485)){
+	if (termios->c_iflag & (XR_RS422 | XR_RS485)) {
 		/* set RS-485 Turn-Around Delay */
 		serial_port_out(port, XR_16M890_SHR, 0);
-	}else{
+	} else {
 		/* set FCL and FCH by Hysteresis Level */
 		serial_port_out(port, XR_16M890_SHR, 0x09);
 	}
-	
+
 	priv->rts = false;
 	priv->xon = false;
 	/* no support DSR/DTR */
 	priv->dtr = false;
-	
-	if(termios->c_cflag & CRTSCTS)
+
+	if (termios->c_cflag & CRTSCTS)
 		priv->rts = true;
-	if(termios->c_cflag & (IXON | IXOFF))
+	if (termios->c_cflag & (IXON | IXOFF))
 		priv->xon = true;
 }
 /*
  * Programmable Baud Rate
  * retrun the divisor and set to DLL/DLD/DLM
 */
-static int anybaudrate_get_divisor(struct uart_port *port, 
-									unsigned int baudrate)
+static int anybaudrate_get_divisor(struct uart_port *port, unsigned int baudrate)
 {
 	int i, j;
 	const int div_min = 1;
@@ -782,58 +776,59 @@ static int anybaudrate_get_divisor(struct uart_port *port,
 	unsigned int frag_divisor;
 	unsigned int tmp_mcr, tmp_efr, tmp_lcr;
 
-	min_delta = baud;	
+	min_delta = baud;
 
 	/*
 	 * Try to try every possible sampling rate,
 	 * and find the best!
 	*/
-	for(i = 0; i < ARRAY_SIZE(ps); i++){
-		for(j = 0; j < ARRAY_SIZE(ps); j++){
+	for (i = 0; i < ARRAY_SIZE(ps); i++) {
+		for (j = 0; j < ARRAY_SIZE(ps); j++) {
 			/* divisor = (clock/1) / (baudrate*sampling rate) */
 			int tmp_div = port->uartclk / (baud*ps[i]*sp[j]);
 			int tmp_baud;
 			int tmp_delt;
 			int head = dld_min;
 			int tail = dld_max;
-	
-			if(tmp_div > div_max || tmp_div < div_min)
+
+			if (tmp_div > div_max || tmp_div < div_min)
 				continue;
-		
-			do{
+
+			do {
 				dld = head + (tail-head)/2;
-				tmp_baud = (16*port->uartclk) / 
-							(16*tmp_div*ps[i]*sp[j] + ps[i]*sp[j]*dld);
+				tmp_baud = (16*port->uartclk) /
+					(16*tmp_div*ps[i]*sp[j] + ps[i]*sp[j]*dld);
 				tmp_delt = abs(baud-tmp_baud);
-				if(tmp_delt < min_delta){
+				if(tmp_delt < min_delta) {
 					min_delta = tmp_delt;
 					prescaler = (unsigned int)ps[i];
 					sc = (unsigned int)sp[j];
 					divisor = (unsigned int)tmp_div;
 					frag_divisor = (unsigned int)dld;
 				}
+
 				if(baud < tmp_baud)
 					head = dld + 1;
 				else
 					tail = dld;
-			}while(head < tail);
+			} while(head < tail);
 		}
 	}
 
 	adv_info("%s: anybaud %d, DLD %d, divisor %d, SC %d, prescaler %d\n",
-				__func__, baud, frag_divisor, divisor, sc, prescaler);
-	/* 
-	 * MCR: Clock Prescaler Select 
+			__func__, baud, frag_divisor, divisor, sc, prescaler);
+	/*
+	 * MCR: Clock Prescaler Select
 	 * MCR[7]=0 : Divide by one
 	 * MCR[7]=1 : Divide by four
 	*/
 	tmp_mcr = serial_port_in(port, UART_MCR);
-	if(prescaler == 0x04)
+	if (prescaler == 0x04)
 		serial_port_out(port, UART_MCR, tmp_mcr | XR_MCR_PRESCALER);
 	else
 		serial_port_out(port, UART_MCR, tmp_mcr & ~(XR_MCR_PRESCALER));
 
-	/* enable enhance mode */	
+	/* enable enhance mode */
 	tmp_lcr = serial_port_in(port, UART_LCR);
 	serial_port_out(port, UART_LCR, UART_LCR_DLAB);
 	tmp_efr = serial_port_in(port, UART_EFR);
@@ -848,22 +843,22 @@ static int anybaudrate_get_divisor(struct uart_port *port,
 		dld |= 0x10;	//sampling rate 8x
 	else
 		pr_err("%s: sc = 16? %d\n", __func__, sc);
-	
+
 	serial_port_out(port, XR_16M890_DLD, dld);
 	serial_port_out(port, UART_LCR, tmp_lcr);
-	
+
 	return divisor;
 }
 
-extern unsigned int uart_get_baud_rate(struct uart_port *port, 
-										struct ktermios *termios,
-										struct ktermios *old, 
-										unsigned int min, 
-										unsigned int max);
+extern unsigned int uart_get_baud_rate(struct uart_port *port,
+					struct ktermios *termios,
+					struct ktermios *old,
+					unsigned int min,
+					unsigned int max);
 
-static void serialxr_set_termios(struct uart_port *port, 
-								struct ktermios *termios,
-			         			struct ktermios *old)
+static void serialxr_set_termios(struct uart_port *port,
+				struct ktermios *termios,
+				struct ktermios *old)
 {
 	unsigned char cval;
 	unsigned char fctr = 0, lcr = 0;
@@ -877,10 +872,9 @@ static void serialxr_set_termios(struct uart_port *port,
 	if(unlikely(baud == 0))
 		baud = priv->baud;
 	else
-		priv->baud = baud;	
+		priv->baud = baud;
 
-	adv_info("%s: ttyAP%d set baudrate = %d\n",
-		 					__func__, priv->line, baud);
+	adv_info("%s: ttyAP%d set baudrate = %d\n", __func__, priv->line, baud);
 	up->lcr = cval;		/* Save computed LCR */
 
 	/*
@@ -888,38 +882,38 @@ static void serialxr_set_termios(struct uart_port *port,
 	 * interrupts disabled.
 	 */
 	spin_lock_irqsave(&port->lock, flags);
-	
+
 	/* Update the per-port timeout */
 	uart_update_timeout(port, termios->c_cflag, baud);
 
 	port->read_status_mask = UART_LSR_OE | UART_LSR_THRE | UART_LSR_DR;
-	if(termios->c_iflag & INPCK)
+	if (termios->c_iflag & INPCK)
 		port->read_status_mask |= UART_LSR_FE | UART_LSR_PE;
-	if(termios->c_iflag & (IGNBRK | BRKINT | PARMRK))
+	if (termios->c_iflag & (IGNBRK | BRKINT | PARMRK))
 		port->read_status_mask |= UART_LSR_BI;
-	
+
 	/* Characteres to ignore */
 	port->ignore_status_mask = 0;
-	if(termios->c_iflag & IGNPAR)
+	if (termios->c_iflag & IGNPAR)
 		port->ignore_status_mask |= UART_LSR_PE | UART_LSR_FE;
-	if(termios->c_iflag & IGNBRK){
+	if (termios->c_iflag & IGNBRK){
 		port->ignore_status_mask |= UART_LSR_BI;
 		/*
 		 * If we're ignoring parity and break indicators,
 		 * ignore overruns too (for real raw support).
 		 */
-		if(termios->c_iflag & IGNPAR)
+		if (termios->c_iflag & IGNPAR)
 			port->ignore_status_mask |= UART_LSR_OE;
 	}
 
 	/* ignore all characters if CREAD is not set */
-	if((termios->c_cflag & CREAD) == 0)
+	if ((termios->c_cflag & CREAD) == 0)
 		port->ignore_status_mask |= UART_LSR_DR;
 
 	flow_control_handle(port, priv, termios);
 
-	adv_info("ttyAP%d set mcr = 0x%0X, ier = 0x%0X\n", 
-										priv->line, up->mcr, up->ier);
+	adv_info("ttyAP%d set mcr = 0x%0X, ier = 0x%0X\n",
+				priv->line, up->mcr, up->ier);
 
 	serial_port_out(port, UART_MCR, up->mcr);
 	serial_port_out(port, UART_IER, up->ier);
@@ -927,15 +921,15 @@ static void serialxr_set_termios(struct uart_port *port,
 	 * Set RTL/TTL
 	 */
 	up->fcr = UART_FCR_ENABLE_FIFO;
-	if(baud <= LOWBAUD_THRESHOLD){
+	if (baud <= LOWBAUD_THRESHOLD) {
 		up->fcr |= UART_FCR_TRIGGER_1;
 		priv->TTL = LOWBAUD_TTL;
 		priv->RTL = LOWBAUD_RTL;
-	}else if(baud < MIDBAUD_THRESHOLD){
+	} else if(baud < MIDBAUD_THRESHOLD) {
 		up->fcr |= UART_FCR_TRIGGER_1;
 		priv->TTL = MIDBAUD_TTL;;
 		priv->RTL = MIDBAUD_RTL;
-	}else{
+	} else {
 		up->fcr |= UART_FCR_TRIGGER_8;
 		priv->TTL = HIGHBAUD_TTL;
 		priv->RTL = HIGHBAUD_RTL;
@@ -950,25 +944,23 @@ static void serialxr_set_termios(struct uart_port *port,
 	 * and FCTR[7]=1 means setup tx
 	 * Then, set TTL to TRIG register
 	*/
-	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | 
-									UART_FCTR_TX | fctr);
+	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | UART_FCTR_TX | fctr);
 	serial_port_out(port, UART_TRG, priv->TTL);
 	/*
 	 * Set RTL:
-	 * first, set the rx fifo trigger use table-D FCTR[5:4]=1, 
+	 * first, set the rx fifo trigger use table-D FCTR[5:4]=1,
 	 * and FCTR[7]=0 means setup rx
 	 * Then, set RTL to TRIG register
 	*/
-	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | 
-										(~UART_FCTR_TX & fctr));
+	serial_port_out(port, UART_FCTR, UART_FCTR_TRGD | (~UART_FCTR_TX & fctr));
 	serial_port_out(port, UART_TRG, priv->RTL);
 	serial_port_out(port, UART_LCR, lcr);
 	/* emulated UARTs (Lucent Venus 167x) need two steps */
 	serial_port_out(port, UART_FCR, UART_FCR_ENABLE_FIFO);
 	serial_port_out(port, UART_FCR, up->fcr);	/* set fcr */
-	
+
 	quot = anybaudrate_get_divisor(port, baud);
-	if(unlikely(quot == 0)) 
+	if (unlikely(quot == 0))
 		quot = (port->uartclk/16/2) / 9600;
 
 	serial_port_out(port, UART_LCR, UART_LCR_DLAB);
@@ -985,17 +977,17 @@ static void serialxr_throttle(struct uart_port *port)
 {
 	unsigned long flags;
 	struct uart_8250_port *up = up_to_u8250p(port);
-	struct exar_priv *priv = port->private_data;	
+	struct exar_priv *priv = port->private_data;
 
 	spin_lock_irqsave(&port->lock, flags);
 
-	if(!priv->throttle){
+	if (!priv->throttle) {
 		up->ier &= ~(UART_IER_RLSI | UART_IER_RDI);
 		serial_port_out(port, UART_IER, up->ier);
 		priv->throttle = true;
 		ADV_DEBUG_IRQ(db_thr_cnt[priv->line]++);
 	}
-	
+
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -1004,102 +996,100 @@ static void serialxr_unthrottle(struct uart_port *port)
 	unsigned long flags;
 	struct uart_8250_port *up = up_to_u8250p(port);
 	struct exar_priv *priv = port->private_data;
-	
+
 	spin_lock_irqsave(&port->lock, flags);
 
-	if(priv->throttle){
+	if (priv->throttle) {
 		up->ier |= UART_IER_RLSI | UART_IER_RDI;
 		serial_port_out(port, UART_IER, up->ier);
 		priv->throttle = false;
 	}
-	
+
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
-static inline int serialxr_send1char(struct uart_port *port,
-									unsigned char ch)
+static inline int serialxr_send1char(struct uart_port *port, unsigned char ch)
 {
 	port->x_char = ch;
 	serialxr_tx_chars(port);
-	
+
 	return 0;
 }
 
-static int serialxr_ioctl(struct uart_port *port, unsigned int cmd, 
-						unsigned long arg)
+static int serialxr_ioctl(struct uart_port *port,
+				unsigned int cmd,
+				unsigned long arg)
 {
 	int ret = -ENOIOCTLCMD;
 	unsigned long flags;
 	struct tty_struct *tty = port->state->port.tty;
 	struct exar_priv *priv = port->private_data;
 
-	switch(cmd){
-		case ADVSENDXON:
-			adv_info("Ioctl: ttyAP%d send XON char\n", priv->line);
-			ret = serialxr_send1char(port, tty->termios.c_cc[VSTART]);
-			break;
-		
-		case ADVSENDXOFF:
-			adv_info("Ioctl: ttyAP%d send XOFF char\n", priv->line);
-			ret = serialxr_send1char(port, tty->termios.c_cc[VSTOP]);
-			break;
-	
-		case ADVTIOCSERGCHARTIMEOUT:
-			if(copy_to_user((void *)arg, &(priv->charto), 
-									sizeof(unsigned long)))
-				return -EFAULT;
+	switch (cmd) {
+	case ADVSENDXON:
+		adv_info("Ioctl: ttyAP%d send XON char\n", priv->line);
+		ret = serialxr_send1char(port, tty->termios.c_cc[VSTART]);
+		break;
 
-			if(arg != 0){
-				spin_lock_irqsave(&port->lock, flags);
-				priv->charto = 0;
-				spin_unlock_irqrestore(&port->lock, flags);
-			}
-			ret = 0;
-			break;
-		
-		case ADVTIOCRTURDFRAME:
-		{
-			unsigned long tmp;
-			
-			if(copy_from_user((void *)(&tmp), (void *)arg,
-								sizeof(unsigned long)))
-			{
-				ret = -EFAULT;
-				break;
-			}
-			if(tmp == 1)
-				priv->mbusreadmode = true;
-			else
-				priv->mbusreadmode = false;
-			
-			ret = 0;
-			break;
+	case ADVSENDXOFF:
+		adv_info("Ioctl: ttyAP%d send XOFF char\n", priv->line);
+		ret = serialxr_send1char(port, tty->termios.c_cc[VSTOP]);
+		break;
+
+	case ADVTIOCSERGCHARTIMEOUT:
+		if (copy_to_user((void *)arg, &(priv->charto),
+					sizeof(unsigned long)))
+			return -EFAULT;
+
+		if (arg != 0) {
+			spin_lock_irqsave(&port->lock, flags);
+			priv->charto = 0;
+			spin_unlock_irqrestore(&port->lock, flags);
 		}
-		case ADVTIOLOOPBACK:
-		{
-			unsigned long tmp;
-			
-			if(copy_from_user((void *)(&tmp), (void *)arg,
-								sizeof(unsigned long)))
-			{
-				ret = -EFAULT;
-				break;
-			}
-			if(tmp == 1)
-				priv->loopback = true;
-			else
-				priv->loopback = false;
-			
-			ret = 0;
-			break;
-		}
-		/* no supprot change RTL/TTL/FIFOSIZE via ioctl */
-		case ADVTIOCSETRTL:
-		case ADVTIOCSETTTL:
-		case ADVTIOCSETFIFOSIZE:
-		case ADVTIOCSETCHANGFLAG:
-			ret = 0;
-			break;
+		ret = 0;
+		break;
+
+	case ADVTIOCRTURDFRAME:
+	{
+		unsigned long tmp;
+
+		if (copy_from_user((void *)(&tmp), (void *)arg,
+						sizeof(unsigned long)))
+			return -EFAULT;
+
+		if (tmp == 1)
+			priv->mbusreadmode = true;
+		else
+			priv->mbusreadmode = false;
+
+		ret = 0;
+		break;
+	}
+
+	case ADVTIOLOOPBACK:
+	{
+		unsigned long tmp;
+
+		if (copy_from_user((void *)(&tmp), (void *)arg,
+						sizeof(unsigned long)))
+			return -EFAULT;
+
+		if (tmp == 1)
+			priv->loopback = true;
+		else
+			priv->loopback = false;
+
+		ret = 0;
+		break;
+	}
+
+	/* no supprot change RTL/TTL/FIFOSIZE via ioctl */
+	case ADVTIOCSETRTL:
+	case ADVTIOCSETTTL:
+	case ADVTIOCSETFIFOSIZE:
+	case ADVTIOCSETCHANGFLAG:
+		ret = 0;
+		break;
 	}
 
 	return ret;
@@ -1129,19 +1119,19 @@ static void serialxr_break_ctl(struct uart_port *port, int break_state)
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
-static void serialxr_set_ldisc(struct uart_port *port, 
-								struct ktermios *termios)
+static void serialxr_set_ldisc(struct uart_port *port,
+				struct ktermios *termios)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
 
-	if(termios->c_line == N_PPS){
+	if (termios->c_line == N_PPS) {
 		port->flags |= UPF_HARDPPS_CD;
 		spin_lock_irq(&port->lock);
 		serialxr_enable_ms(port);
 		spin_unlock_irq(&port->lock);
-	}else{
+	} else {
 		port->flags &= ~UPF_HARDPPS_CD;
-		if(!UART_ENABLE_MS(port, termios->c_cflag)){
+		if(!UART_ENABLE_MS(port, termios->c_cflag)) {
 			up->ier &= ~UART_IER_MSI;
 			spin_lock_irq(&port->lock);
 			serial_port_out(port, UART_IER, up->ier);
@@ -1154,7 +1144,7 @@ static const char * serialxr_type(struct uart_port *port)
 {
 	int type = port->type;
 
-	if(type >= ARRAY_SIZE(xr_uart_config)) 
+	if(type >= ARRAY_SIZE(xr_uart_config))
 		type = 0;
 
 	return xr_uart_config[type].name;
@@ -1165,7 +1155,7 @@ static unsigned int serialxr_port_size(struct uart_8250_port *pt)
 	if (pt->port.mapsize)
 		return pt->port.mapsize;
 
-	if (pt->port.iotype == UPIO_AU) 
+	if (pt->port.iotype == UPIO_AU)
 		return 0x1000;
 
 	return 8 << pt->port.regshift;
@@ -1176,26 +1166,26 @@ static void serialxr_release_port(struct uart_port *port)
 	struct uart_8250_port *up = up_to_u8250p(port);
 	unsigned int size = serialxr_port_size(up);
 
-	switch(port->iotype){
-		case UPIO_AU:
-		case UPIO_TSI:
-		case UPIO_MEM32:
-		case UPIO_MEM32BE:
-		case UPIO_MEM:
-			if(!port->mapbase) break;
+	switch (port->iotype) {
+	case UPIO_AU:
+	case UPIO_TSI:
+	case UPIO_MEM32:
+	case UPIO_MEM32BE:
+	case UPIO_MEM:
+		if (!port->mapbase) break;
 
-			if(port->flags & UPF_IOREMAP){
-				iounmap(port->membase);
-				port->membase = NULL;
-			}
+		if (port->flags & UPF_IOREMAP) {
+			iounmap(port->membase);
+			port->membase = NULL;
+		}
 
-			release_mem_region(port->mapbase, size);
-			break;
+		release_mem_region(port->mapbase, size);
+		break;
 
-		case UPIO_HUB6:
-		case UPIO_PORT:
-			release_region(port->iobase, size);
-			break;
+	case UPIO_HUB6:
+	case UPIO_PORT:
+		release_region(port->iobase, size);
+		break;
 	}
 }
 
@@ -1205,35 +1195,32 @@ static int serialxr_request_port(struct uart_port *port)
 	struct uart_8250_port *up = up_to_u8250p(port);
 	unsigned int size = serialxr_port_size(up);
 
-	switch(port->iotype){
-		case UPIO_AU:
-		case UPIO_TSI:
-		case UPIO_MEM32:
-		case UPIO_MEM32BE:
-		case UPIO_MEM:
-			if(!port->mapbase) break;
+	switch (port->iotype) {
+	case UPIO_AU:
+	case UPIO_TSI:
+	case UPIO_MEM32:
+	case UPIO_MEM32BE:
+	case UPIO_MEM:
+		if (!port->mapbase) break;
 
-			if(!request_mem_region(port->mapbase, 
-					size, "eaxr_serial")) 
-			{
-				ret = -EBUSY;
-				break;
+		if (!request_mem_region(port->mapbase,
+					size, "eaxr_serial"))
+			return -EBUSY;
+
+		if (port->flags & UPF_IOREMAP) {
+			port->membase = ioremap_nocache(port->mapbase, size);
+			if (!port->membase) {
+				release_mem_region(port->mapbase, size);
+				ret = -ENOMEM;
 			}
+		}
+		break;
 
-			if(port->flags & UPF_IOREMAP){
-				port->membase = ioremap_nocache(port->mapbase, size);
-				if(!port->membase){
-					release_mem_region(port->mapbase, size);
-					ret = -ENOMEM;
-				}
-			}
-			break;
-
-		case UPIO_HUB6:
-		case UPIO_PORT:
-			if(!request_region(port->iobase, size, "exar_serial"))
-				ret = -EBUSY;
-			break;
+	case UPIO_HUB6:
+	case UPIO_PORT:
+		if (!request_region(port->iobase, size, "exar_serial"))
+			return -EBUSY;
+		break;
 	}
 	return ret;
 }
@@ -1242,15 +1229,15 @@ static void serialxr_config_port(struct uart_port *port, int flags)
 {
 	int ret;
 	struct uart_8250_port *up = up_to_u8250p(port);
-	
+
 	ret = serialxr_request_port(port);
-	if(ret < 0) return;
-	
-	private_data_init(port);	
+	if (ret < 0) return;
+
+	private_data_init(port);
 
 	if(port->iotype != up->cur_iotype)
 		set_io_from_upio(port);
-	
+
 	up->port.flags |= UPF_HARD_FLOW | UPF_SOFT_FLOW;
 	up->fcr = xr_uart_config[up->port.type].fcr;
 }
@@ -1264,7 +1251,7 @@ static void serialxr_pm(struct uart_port *port, unsigned int state,
 	/*
 	 * To enable sleep mode, EFR[4]=1, LCR[7]=0
 	*/
-	if(state){
+	if (state) {
 		/* sleep mode IER[4]=1 */
 		serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
 		serial_port_out(port, UART_EFR, UART_EFR_ECB);
@@ -1273,7 +1260,7 @@ static void serialxr_pm(struct uart_port *port, unsigned int state,
 		serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
 		serial_port_out(port, UART_EFR, 0);
 		serial_port_out(port, UART_LCR, lcr);
-	}else{
+	} else {
 		/* wake up mode IER[4]=0 */
 		serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
 		serial_port_out(port, UART_EFR, UART_EFR_ECB);
@@ -1282,30 +1269,30 @@ static void serialxr_pm(struct uart_port *port, unsigned int state,
 		serial_port_out(port, UART_LCR, UART_LCR_CONF_MODE_B);
 		serial_port_out(port, UART_EFR, 0);
 		serial_port_out(port, UART_LCR, lcr);
-	}	
+	}
 }
 
 static struct uart_ops serialxr_pops = {
-	.tx_empty		= serialxr_tx_empty,
-	.set_mctrl		= serialxr_set_mctrl,
-	.get_mctrl		= serialxr_get_mctrl,
-	.stop_tx		= serialxr_stop_tx,
-	.start_tx		= serialxr_start_tx,
-	.throttle		= serialxr_throttle,
-	.unthrottle		= serialxr_unthrottle,
-	.stop_rx		= serialxr_stop_rx,
-	.enable_ms		= serialxr_enable_ms,
-	.break_ctl		= serialxr_break_ctl,
-	.startup		= serialxr_startup,
-	.shutdown		= serialxr_shutdown,
+	.tx_empty	= serialxr_tx_empty,
+	.set_mctrl	= serialxr_set_mctrl,
+	.get_mctrl	= serialxr_get_mctrl,
+	.stop_tx	= serialxr_stop_tx,
+	.start_tx	= serialxr_start_tx,
+	.throttle	= serialxr_throttle,
+	.unthrottle	= serialxr_unthrottle,
+	.stop_rx	= serialxr_stop_rx,
+	.enable_ms	= serialxr_enable_ms,
+	.break_ctl	= serialxr_break_ctl,
+	.startup	= serialxr_startup,
+	.shutdown	= serialxr_shutdown,
 	.set_termios	= serialxr_set_termios,
-	.set_ldisc		= serialxr_set_ldisc,
-	.pm				= serialxr_pm,
-	.type			= serialxr_type,
+	.set_ldisc	= serialxr_set_ldisc,
+	.pm		= serialxr_pm,
+	.type		= serialxr_type,
 	.release_port	= serialxr_release_port,
 	.request_port	= serialxr_request_port,
 	.config_port	= serialxr_config_port,
-	.ioctl			= serialxr_ioctl, 
+	.ioctl		= serialxr_ioctl,
 };
 
 static void serialxr_handle_one_port(struct uart_8250_port *up)
@@ -1313,22 +1300,22 @@ static void serialxr_handle_one_port(struct uart_8250_port *up)
 	unsigned char lsr;
 	unsigned long flags;
 	struct uart_port *port = &up->port;
-	
+
 	lsr = (unsigned char)serial_port_in(port, UART_LSR);
 	DEBUG_INTR("timeout irq status = %x...", status);
 
 	spin_lock_irqsave(&port->lock, flags);
 
-	if(lsr & (UART_LSR_DR | UART_LSR_BI))
+	if (lsr & (UART_LSR_DR | UART_LSR_BI))
 		serialxr_rx_chars(port, &lsr);
-	
+
 	serialxr_modem_status(port);
-	
-	if(lsr & UART_LSR_THRE)
+
+	if (lsr & UART_LSR_THRE)
 		serialxr_tx_chars(port);
-	
+
 	spin_unlock_irqrestore(&port->lock, flags);
-}	
+}
 
 static void serialxr_timeout(unsigned long data)
 {
@@ -1336,7 +1323,7 @@ static void serialxr_timeout(unsigned long data)
 	struct uart_8250_port *up = (struct uart_8250_port *)data;
 
 	iir = serial_in(up, UART_IIR);
-	if(!(iir & UART_IIR_NO_INT))
+	if (!(iir & UART_IIR_NO_INT))
 		serialxr_handle_one_port(up);
 
 	mod_timer(&up->timer, jiffies + uart_poll_timeout(&up->port));
@@ -1355,28 +1342,28 @@ static int XR_set_default_mode(struct uart_8250_port *uart)
 	int gpio;
 	enum of_gpio_flags flags;
 	struct device_node *np = uart->port.dev->of_node;
-	
-	if(!np){
+
+	if (!np) {
 		pr_err("%s: No device tree node!\n", __func__);
 		return -1;
 	}
 
 	gpio = of_get_named_gpio_flags(np, "mode-sel-gpio", 0, &flags);
-	if(!gpio_is_valid(gpio)){
+	if (!gpio_is_valid(gpio)) {
 		pr_err("Cannot find %s GPIO defined!\n", np->name);
 		return -1;
 	}
 
 	/* GPIO get number request */
 	err = devm_gpio_request(uart->port.dev, gpio, "exar_uart_sel");
-	if(err){
+	if (err) {
 		pr_err("%s: GPIO(%d) request failed!\n", np->name, gpio);
 		return -1;
 	}
 
 	/* Set GPIO as high, uart default mode as RS232 */
 	err = gpio_direction_output(gpio, 1);
-	if(err < 0){
+	if (err < 0) {
 		pr_err("%s: GPIO(%d) set high failed!\n", np->name, gpio);
 		return -1;
 	}
@@ -1388,21 +1375,20 @@ static int XR_set_default_mode(struct uart_8250_port *uart)
 	return gpio;
 }
 
-static void * 
-XR_private_data_alloc(struct uart_8250_port *uart, int line, int gpio)
+static void * XR_private_data_alloc(struct uart_8250_port *uart,
+					int line, int gpio)
 {
 	struct exar_priv *priv;
 
-	priv = devm_kzalloc(uart->port.dev,
-						sizeof(struct exar_priv), 
-						GFP_KERNEL);
-	if(!priv){
+	priv = devm_kzalloc(uart->port.dev, sizeof(struct exar_priv), GFP_KERNEL);
+	if (!priv) {
 		pr_err("ttyAP%d alloc private data failed!\n", line);
 		return NULL;
 	}
+
 	priv->line = line;
 	priv->gpio_sel = gpio;
-	
+
 	return (void *)priv;
 }
 
@@ -1411,7 +1397,7 @@ XR_private_data_alloc(struct uart_8250_port *uart, int line, int gpio)
 #define SERIAL_NAME "ttyAP"
 static struct uart_driver serialxr_drv = {
 	.owner			= THIS_MODULE,
-	.driver_name 	= "serialxr",
+	.driver_name		= "serialxr",
 	.dev_name		= SERIAL_NAME,
 	.major			= XR_MAJOR,
 	.minor			= XR_MINOR,
@@ -1422,7 +1408,7 @@ static struct uart_driver serialxr_drv = {
 static DEFINE_MUTEX(serial_mutex);
 static struct uart_8250_port serialxr_ports[NR_PORTS];
 
-static struct uart_8250_port 
+static struct uart_8250_port
 *serialxr_find_match_or_unused(struct uart_port *port)
 {
 	int i;
@@ -1431,7 +1417,7 @@ static struct uart_8250_port
 	 * free entry.  We look for one which hasn't been previously
 	 * used (indicated by zero iobase).
 	 */
-	for (i = 0; i < NR_PORTS; i++){
+	for (i = 0; i < NR_PORTS; i++) {
 		if (serialxr_ports[i].port.type == PORT_UNKNOWN &&
 		    serialxr_ports[i].port.iobase == 0)
 		{
@@ -1468,7 +1454,7 @@ int serialxr_register_16m890_port(struct uart_8250_port *up)
 	mutex_lock(&serial_mutex);
 
 	uart = serialxr_find_match_or_unused(&up->port);
-	if(uart){
+	if (uart) {
 		uart->port.type			= up->port.type;
 		uart->port.iobase       = up->port.iobase;
 		uart->port.membase      = up->port.membase;
@@ -1480,26 +1466,26 @@ int serialxr_register_16m890_port(struct uart_8250_port *up)
 		uart->port.iotype       = up->port.iotype;
 		uart->port.flags        = up->port.flags | UPF_BOOT_AUTOCONF;
 		uart->port.mapbase      = up->port.mapbase;
-		uart->port.mapsize      = up->port.mapsize;
+		uart->port.mapsize	= up->port.mapsize;
 		uart->tx_loadsz			= up->tx_loadsz;
 		uart->capabilities		= up->capabilities;
 		uart->port.dev			= up->port.dev;
 		/* The driver's ops */
 		uart->port.ops 			= &serialxr_pops;
-	
-		if(!uart->port.fifosize)
+
+		if (!uart->port.fifosize)
 			uart->port.fifosize = xr_uart_config[type].fifo_size;
-		if(!uart->tx_loadsz)
+		if (!uart->tx_loadsz)
 			uart->tx_loadsz = xr_uart_config[type].tx_loadsz;
-		if(!uart->capabilities)
+		if (!uart->capabilities)
 			uart->capabilities = xr_uart_config[type].flags;
 
 		spin_lock_init(&uart->port.lock);
 		uart->cur_iotype = 0xFF;
 		/* ALPHA_KLUDGE_MCR needs to be killed */
 		uart->mcr_mask = ~ALPHA_KLUDGE_MCR;
-		uart->mcr_force = ALPHA_KLUDGE_MCR;	
-	
+		uart->mcr_force = ALPHA_KLUDGE_MCR;
+
 		set_io_from_upio(&uart->port);
 
 		init_timer(&uart->timer);
@@ -1508,9 +1494,9 @@ int serialxr_register_16m890_port(struct uart_8250_port *up)
 		gpio = XR_set_default_mode(uart);
 		if(gpio == -1)
 			return -ENOMEM;
-		
+
 		uart->port.private_data = XR_private_data_alloc(up, uart->port.line, gpio);
-		if(uart->port.private_data == NULL)
+		if(!uart->port.private_data)
 			return -ENOMEM;
 
 		ret = uart_add_one_port(&serialxr_drv, &uart->port);
@@ -1524,7 +1510,7 @@ int serialxr_register_16m890_port(struct uart_8250_port *up)
 EXPORT_SYMBOL(serialxr_register_16m890_port);
 
 /**
- *	serialxr_unregister_16m890_port - 
+ *	serialxr_unregister_16m890_port -
  *	remove a exar 16m890 serial port at runtime
  *	@line: serial line number
  *
@@ -1544,21 +1530,21 @@ void serialxr_unregister_16m890_port(int line)
 }
 EXPORT_SYMBOL(serialxr_unregister_16m890_port);
 
-static void 
+static void
 serialxr_line_info(struct seq_file *m, struct uart_driver *drv, int i)
 {
 	struct uart_state *state = drv->state + i;
 	struct uart_port *port = state->uart_port;
 	struct exar_priv *priv = port->private_data;
-	
+
 	seq_printf(m, "Port%d TTX:%lu\n", i, (unsigned long)port->icount.tx);
 	seq_printf(m, "Port%d TRX:%lu\n", i, (unsigned long)port->icount.rx);
 	seq_printf(m, "Port%d TX:%lu\n", i, priv->tx);
 	seq_printf(m, "Port%d RX:%lu\n", i, priv->rx);
 	seq_printf(m, "Port%d TYPE%d\n", i, priv->type);
-	seq_printf(m, "Port%d FLOW:RTS:%d XON:%d DTR:%d\n", 
+	seq_printf(m, "Port%d FLOW:RTS:%d XON:%d DTR:%d\n",
 				i, priv->rts, priv->xon, priv->dtr);
-	seq_printf(m, "Port%d PARM:DATA:%u STOP:%u PARY:%u\n", 
+	seq_printf(m, "Port%d PARM:DATA:%u STOP:%u PARY:%u\n",
 				i, priv->data, priv->stop, priv->pary);
 }
 
@@ -1568,8 +1554,8 @@ static int serialxr_proc_show(struct seq_file *m, void *v)
 	struct uart_driver *drv = m->private;
 
 	for (i = 0; i < drv->nr; i++)
-		serialxr_line_info(m, drv, i);	
-	
+		serialxr_line_info(m, drv, i);
+
 	return 0;
 }
 
@@ -1595,17 +1581,17 @@ static void debug_info(struct seq_file *m, struct uart_driver *drv, int i)
 	struct uart_port *port = state->uart_port;
 	struct exar_priv *priv = port->private_data;
 
-	ier = serial_port_in(port, UART_IER);	
+	ier = serial_port_in(port, UART_IER);
 	seq_printf(m, "ttyAP%d: irq(%llx), ResetIERcnt(%d), "
-					"IER_THRI(%s), IER_RLSI(%s), txStatus(%d), "
-					"thrCnt(%d)\n", 
-					priv->line, 
-					db_irq_record[i], 
-					db_re_ier_cnt[i],
-					ier&UART_IER_THRI ? "o":"x",
-					ier&UART_IER_RLSI ? "o":"x",
-					db_txstat[i],
-					db_thr_cnt[i]);
+			"IER_THRI(%s), IER_RLSI(%s), txStatus(%d), "
+			"thrCnt(%d)\n",
+			priv->line,
+			db_irq_record[i],
+			db_re_ier_cnt[i],
+			ier&UART_IER_THRI ? "o":"x",
+			ier&UART_IER_RLSI ? "o":"x",
+			db_txstat[i],
+			db_thr_cnt[i]);
 }
 
 static int adv_debug_show(struct seq_file *m, void *v)
@@ -1614,20 +1600,19 @@ static int adv_debug_show(struct seq_file *m, void *v)
 	struct uart_driver *drv = m->private;
 
 	seq_printf(m, "\n<IRQ>\n\t"
-					"1: Rx data interrupt\n\t"
-					"2: Ms interrupt\n\t"
-					"3: Rx data timeout\n\t"
-					"4: Rx line status\n\t"
-					"5: Tx empty\n");
+		"1: Rx data interrupt\n\t"
+		"2: Ms interrupt\n\t"
+		"3: Rx data timeout\n\t"
+		"4: Rx line status\n\t"
+		"5: Tx empty\n");
 	seq_printf(m, "<Tx Status>\n\t"
-					"-1: xon/xoff\n\t"
-					"-2: uart_tx_stopped\n\t"
-					"-3: ring buffer empty\n\t"
-					">=0: data pending in buffer\n");
+			"-1: xon/xoff\n\t"
+			"-2: uart_tx_stopped\n\t"
+			"-3: ring buffer empty\n\t"
+			">=0: data pending in buffer\n");
 	seq_printf(m, "--------------------------------------------------\n");
-	for (i = 0; i < drv->nr; i++){
+	for (i = 0; i < drv->nr; i++)
 		debug_info(m, drv, i);
-	}
 
 	return 0;
 }
@@ -1647,36 +1632,29 @@ static const struct file_operations adv_debug_irq_proc_fops = {
 #endif
 static int __init serialxr_init(void)
 {
-	int ret = 0;
 	struct proc_dir_entry *proc_file_entry;
 
-	do{
-		ret = uart_register_driver(&serialxr_drv);
-		if(ret){
-			pr_err("Exar 16m890 serial driver register failed!\n");
-			ret = -ENOMEM;
-			break;
-		}
-		pr_info("Exar 16m890 serial driver Ver 1.0 loaded\n");
+	if (uart_register_driver(&serialxr_drv)) {
+		pr_err("Exar 16m890 serial driver register failed!\n");
+		return -ENOMEM;
+	}
 
-		proc_file_entry = proc_create("driver/serial", 0, NULL, &serialxr_proc_fops);
-		if(proc_file_entry == NULL){
-			pr_err("Exar 16m890 serial driver proc register failed!\n");
-			ret = -ENOMEM;
-			break;
-		}
-		pr_info("Exar 16m890 serial infomation proc created\n");
+	pr_info("Exar 16m890 serial driver Ver 1.0 loaded\n");
+
+	proc_file_entry = proc_create("driver/serial", 0, NULL, &serialxr_proc_fops);
+	if (!proc_file_entry) {
+		pr_err("Exar 16m890 serial driver proc register failed!\n");
+		return -ENOMEM;
+	}
+	pr_info("Exar 16m890 serial infomation proc created\n");
 #ifdef __ADV_DEBUG_IRQ__
-		proc_file_entry = proc_create("advSerialDebug", 0, NULL, &adv_debug_irq_proc_fops);
-		if(proc_file_entry == NULL){
-			//if failed, we don't care
-			pr_err("Warnning: Create adv serial debug infomation failed!\n");
-		}
+	proc_file_entry = proc_create("advSerialDebug", 0, NULL, &adv_debug_irq_proc_fops);
+	if (!proc_file_entry)
+		//if failed, we don't care
+		pr_err("Warnning: Create adv serial debug infomation failed!\n");
 #endif
 
-	}while(0);
-
-	return ret;
+	return 0;
 }
 
 static void __exit serialxr_exit(void)

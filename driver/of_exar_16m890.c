@@ -10,7 +10,7 @@
 
 extern int serialxr_register_16m890_port(struct uart_8250_port *up);
 extern void serialxr_unregister_16m890_port(int line);
- 
+
 struct of_serialxr_info {
 	struct clk *clk;
 	int type;
@@ -97,7 +97,7 @@ static int of_platform_serialxr_setup(struct platform_device *ofdev,
 
 	port->type = type;
 	port->uartclk = clk;
-	port->flags = UPF_BOOT_AUTOCONF | UPF_IOREMAP | 
+	port->flags = UPF_BOOT_AUTOCONF | UPF_IOREMAP |
 					UPF_FIXED_PORT | UPF_FIXED_TYPE;
 
 	if (of_find_property(np, "no-loopback-test", NULL))
